@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum user_role {
+  user
+  admin
+}
+
+enum otp_type {
+  email_verification
+  password_reset
+  two_factor
+}
+
+enum profile_visibility_type {
+  public
+  private
+  selected
+}
+
+enum profile_purchase_type {
+  premium
+  monument
+}
+
+enum payment_status {
+  pending
+  paid
+  failed
+  cancelled
+  refunded
+}
+
+model users {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  login             String    @unique @db.VarChar(50)
+  email             String    @unique @db.VarChar(50)
+  password          String
+  registration_time DateTime  @default(now()) @db.Timestamptz(6)
+  last_login_time   DateTime? @db.Timestamptz(6)
+  is_verified       Boolean?  @default(false)
+  role              user_role @default(user)
+
+  tokens            tokens[]
+  profiles          profiles[]
+  comments          profile_comments[]
+
+  profileVisibility profile_visibility_user[]
+  editableProfiles  profile_editors[]
+  purchases         profile_purchases[]
+  otpCodes          otp_code[]
+}
+
+model tokens {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  userId    String   @db.Uuid
+  user      users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model profiles {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  userId            String    @db.Uuid
+  user              users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  avatar            String?   @db.Text
+
+  fullName          String    @db.VarChar(255)
+  birthDate         DateTime? @db.Date
+  deathDate         DateTime? @db.Date
+
+  quote             String?   @db.Text
+  quoteAuthor       String?   @db.VarChar(255)
+
+  birthPlace        String?   @db.VarChar(255)
+  deathPlace        String?   @db.VarChar(255)
+  spouse            String?   @db.VarChar(255)
+  children          String[]
+
+  citizenship       String?   @db.VarChar(100)
+  education         String?   @db.Text
+  occupation        String?   @db.Text
+  awards            String[]
+
+  contentMarkdown   String    @db.Text
+  photoGallery      String[]
+
+  comments          profile_comments[]
+
+  burialAddress     String?   @db.Text
+  burialCoordinates Json?
+
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+
+  visibilitySettings profile_visibility_settings?
+  editors            profile_editors[]
+  purchases          profile_purchases[]
+  is_premium        Boolean  @default(false)
+}
+
+model profile_comments {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  text        String   @db.Text
+  authorRole  String   @db.VarChar(100)
+  customName  String?  @db.VarChar(255)
+  isApproved  Boolean  @default(false)
+
+  profileId   String   @db.Uuid
+  profile     profiles @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  userId      String   @db.Uuid
+  user        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+}
+
+model profile_visibility_settings {
+  id          String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  profileId   String                    @unique @db.Uuid
+  profile     profiles                  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  visibility  profile_visibility_type   @default(public)
+
+  allowedUsers profile_visibility_user[]
+
+  createdAt   DateTime                  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime                  @updatedAt @db.Timestamptz(6)
+}
+
+model profile_visibility_user {
+  id          String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  settingsId  String                      @db.Uuid
+  settings    profile_visibility_settings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  userId      String                      @db.Uuid
+  user        users                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([settingsId, userId])
+  @@index([settingsId])
+  @@index([userId])
+}
+
+model profile_editors {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  profileId   String    @db.Uuid
+  profile     profiles  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  userId      String    @db.Uuid
+  user        users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([profileId, userId])
+  @@index([profileId])
+  @@index([userId])
+}
+
+model profile_purchases {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  userId String @db.Uuid
+  user users @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  profileId String? @db.Uuid
+  profile profiles? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+
+  type profile_purchase_type
+
+  status payment_status @default(pending)
+
+  amount Decimal @db.Decimal(10,2)
+  currency String @default("RUB") @db.VarChar(10)
+
+  invoiceId String @unique
+  transactionId String? @unique
+
+  payload Json?
+
+  paidAt DateTime?
+  activatedAt DateTime?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([status])
+  @@index([invoiceId])
+}
+
+model otp_code {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  codeHash  String
+  type      otp_type
+  expiresAt DateTime @db.Timestamptz(6)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user users @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
